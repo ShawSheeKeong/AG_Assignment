@@ -1,0 +1,67 @@
+name: Build and Test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  SOLUTION_PATH: "Challenge1/WeatherService/WeatherService.sln"
+  TEST_PROJECT: "Challenge1/WeatherService/Weather.Tests/Weather.Tests.csproj"
+
+jobs:
+  build-and-test:
+    name: Build & Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup .NET ──────────────────────────────────────────────────
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # ── 3. Cache NuGet packages ────────────────────────────────────────
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # ── 4. Restore dependencies ────────────────────────────────────────
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+      # ── 5. Build solution ──────────────────────────────────────────────
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION_PATH }}
+          --configuration Release
+          --no-restore
+          --verbosity minimal
+
+      # ── 6. Run unit tests with coverage ───────────────────────────────
+      - name: Run unit tests
+        run: dotnet test ${{ env.TEST_PROJECT }}
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      # ── 7. Upload coverage report as artifact ─────────────────────────
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: TestResults/**/coverage.cobertura.xml
+          retention-days: 14
